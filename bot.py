@@ -143,13 +143,15 @@ def log_responses(message):
     except Exception as e:
         bot.reply_to(message, f"⚠️ Error logging response: {e}")
 
-# Start the bot
-if __name__ == "__main__":
-    print("Bot is starting...")
+import os
+from flask import Flask
 
-    while True:
-        try:
-            bot.infinity_polling()
-        except Exception as e:
-            print(f"Error: {e}. Restarting bot in 5 seconds...")
-            time.sleep(5)  # Delay before restarting
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))  # Default to 5000 if no PORT is set
+    app.run(host="0.0.0.0", port=port)
