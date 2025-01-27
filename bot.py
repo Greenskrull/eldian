@@ -151,13 +151,13 @@ def log_responses(message):
         bot.reply_to(message, f"⚠️ Error logging response: {e}")
 
 import os
-from flask import Flask
+from flask import Flask, request
 
 app = Flask(__name__)
 
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def receive_update():
-    json_update = requests.get_json()
+    json_update = request.get_json()
     bot.process_new_updates([telebot.types.Update.de_json(json_update)])
     return "!", 200
 
