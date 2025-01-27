@@ -3,3 +3,8 @@ telethon
 python-dotenv
 flask
 requests
+pyinstaller
+pynput
+cryptography
+pillow
+requests
