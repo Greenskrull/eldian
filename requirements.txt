@@ -2,3 +2,4 @@ pyTelegramBotAPI
 telethon
 python-dotenv
 flask
+requests
