@@ -1,6 +1,7 @@
 import os
 import telebot
 from telethon import TelegramClient
+import threading 
 
 # Load environment variables
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
