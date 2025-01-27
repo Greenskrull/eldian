@@ -34,7 +34,6 @@ def send_help(message):
         "/credentials - Collects username and password.\n"
         "/payload - Generates and sends a secure payload file (for authorized users only).\n"
         "/help - Displays this help message.\n\n"
-        "/target - {e}.\n"
         "💡 *Additional Features:*\n"
         "- All messages are logged for review.\n"
         "- Responses are securely forwarded to the admin.\n"
