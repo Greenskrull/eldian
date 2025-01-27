@@ -152,6 +152,24 @@ app = Flask(__name__)
 def home():
     return "Bot is running!"
 
-if __name__ == "__main__":
+def run_flask():
     port = int(os.environ.get("PORT", 5000))  # Default to 5000 if no PORT is set
     app.run(host="0.0.0.0", port=port)
+
+def run_telegram_bot():
+    print("Starting Telegram bot...")
+    bot.infinity_polling()
+
+# Run both Flask and Telegram bot
+if __name__ == "__main__":
+    flask_thread = threading.Thread(target=run_flask)
+    telegram_thread = threading.Thread(target=run_telegram_bot)
+
+    flask_thread.start()
+    telegram_thread.start()
+
+    flask_thread.join()
+    telegram_thread.join()
+
+
+
