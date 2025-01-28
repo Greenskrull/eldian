@@ -268,4 +268,4 @@ async def webhook():
 
 if __name__ == "__main__":
     from gunicorn.app.wsgiapp import run
-    run()  # Use Gunicorn to serve the app
+    app.run(host='0.0.0.0', port=PORT)  # Directly run the app with Flask if not using Gunicorn
