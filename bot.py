@@ -250,13 +250,21 @@ def receive_update():
 def home():
     return "Bot is running!"
 
-def set_webhook():
-    bot.remove_webhook()
-    bot.set_webhook(url=f"{WEBHOOK_URL}/{BOT_TOKEN}")
+async def setup_webhook():
+    """Remove any existing webhook and set a new one."""
+    await bot.remove_webhook()
+    await bot.set_webhook(url=f"{WEBHOOK_URL}/{BOT_TOKEN}")
 
-# --- Main Execution ---
+asyncio.run(setup_webhook())
+
+@app.route(f"/{BOT_TOKEN}", methods=["POST"])
+async def webhook():
+    """Process incoming updates from Telegram."""
+    if request.data:
+        update = request.get_data().decode("utf-8")
+        await bot.process_new_updates([update])
+    return "OK", 200
+
 if __name__ == "__main__":
-    set_webhook()
-    flask_thread = threading.Thread(target=app.run, kwargs={"host": "0.0.0.0", "port": PORT}, daemon=True)
-    flask_thread.start()
-    asyncio.run(bot.polling())
+    from gunicorn.app.wsgiapp import run
+    run()  # Use Gunicorn to serve the app
