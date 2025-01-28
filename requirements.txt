@@ -8,3 +8,4 @@ pyxhook
 cryptography
 pillow
 requests
+aiohttp
