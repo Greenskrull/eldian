@@ -4,7 +4,7 @@ python-dotenv
 flask
 requests
 pyinstaller
-pynput
+pyxhook
 cryptography
 pillow
 requests
