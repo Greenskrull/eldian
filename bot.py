@@ -7,9 +7,6 @@ import requests
 import keylogger
 from cryptography.fernet import Fernet
 from flask import Flask, request
-
-bbot = telebot.TeleBot("YOUR_BOT_TOKEN")
-
 # Delete any active webhook
 
 # --- Load Environment Variables ---
